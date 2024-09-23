@@ -1,4 +1,8 @@
-﻿using QRCoder;
+﻿using System.Globalization;
+using CsvHelper;
+using CsvHelper.Configuration;
+using CsvHelper.Configuration.Attributes;
+using QRCoder;
 
 Console.WriteLine(@" $$$$$$\  $$$$$$$\         $$$$$$\                  $$\           ");
 Console.WriteLine(@"$$  __$$\ $$  __$$\       $$  __$$\                 $$ |          ");
@@ -22,26 +26,87 @@ Console.WriteLine(@"\$$$$$$  |                                                  
 Console.WriteLine(@" \______/");
 Console.WriteLine("");
 
-Console.WriteLine("Please enter URL:");
-var url = Console.ReadLine();
+string? input = null;
+while (input == null)
+{
+	Console.WriteLine("Please enter URL (type CSV to read from CSV file instead)");
+	input = Console.ReadLine();
+	var useCsv = input?.ToUpper() == "CSV";
 
-Console.WriteLine("Please enter filename (without .png)");
-var fileName = Console.ReadLine();
+	if (input == null) continue;
 
-Console.WriteLine("Generating QR-code...");
+	Dictionary<string, string> urls = [];
+	if (useCsv)
+	{
+		Console.WriteLine("The csv file should be formated: filename (without .png), url");
+		Console.WriteLine("Please enter path to CSV file");
+		input = Console.ReadLine();
+		var filePath = input ?? string.Empty;
 
-var qrGenerator = new QRCodeGenerator();
-var urlPayload = new PayloadGenerator.Url(url);
-var qrCodeData = qrGenerator.CreateQrCode(urlPayload);
+		var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+		{
+			HasHeaderRecord = false,
+			NewLine = Environment.NewLine
+		};
+		var reader = new StreamReader(filePath);
+		var csv = new CsvReader(reader, config);
+		var records = csv.GetRecords<CsvRow>().ToList();
 
-var qrCode = new PngByteQRCode(qrCodeData).GetGraphic(512);
+		foreach (var record in records)
+		{
+			if (record.FileName == null) continue;
+			if (record.Url == null) continue;
+
+			urls.Add(record.FileName, record.Url);
+		}
+	}
+	else
+	{
+		Console.WriteLine("Please enter filename (without .png)");
+		var fileName = Console.ReadLine() ?? string.Empty;
+
+		urls.Add(fileName, input);
+	}
 
 
-var dirPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-var filePath = $"{dirPath}/{fileName}.png";
+	Console.WriteLine(urls.Count == 1 ? "Generating QR-code..." : "Generating QR-codes...");
 
-var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
-fs.Write(qrCode, 0, qrCode.Length);
+	var dirPath = $"{Environment.GetFolderPath(Environment.SpecialFolder.Desktop)}/QR Codes";
+	try
+	{
+		Directory.CreateDirectory(dirPath);
+	}
+	catch
+	{
+		// Ignore
+	}
+
+	foreach (var url in urls)
+	{
+		var qrGenerator = new QRCodeGenerator();
+		var urlPayload = new PayloadGenerator.Url(url.Value);
+		var qrCodeData = qrGenerator.CreateQrCode(urlPayload);
+
+		var qrCode = new PngByteQRCode(qrCodeData).GetGraphic(512);
+
+		var filePath = $"{dirPath}/{url.Key}.png";
+
+		var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+		fs.Write(qrCode, 0, qrCode.Length);
+		fs.Close();
+
+		if (urls.Count == 1) Console.WriteLine($"File can be found at {filePath}");
+	}
+
+	if (urls.Count > 1) Console.WriteLine($"Files can be found at {dirPath}");
+}
 
 Console.WriteLine($"Done!");
-Console.WriteLine($"File can be found at {filePath}");
+
+
+public class CsvRow
+{
+	[Index(0)] public string? FileName { get; set; }
+
+	[Index(1)] public string? Url { get; set; }
+}
