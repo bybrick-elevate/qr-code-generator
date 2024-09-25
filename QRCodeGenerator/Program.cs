@@ -45,11 +45,13 @@ while (input == null)
 
 		var config = new CsvConfiguration(CultureInfo.InvariantCulture)
 		{
+			Delimiter = ";",
 			HasHeaderRecord = false,
 			NewLine = Environment.NewLine
 		};
 		var reader = new StreamReader(filePath);
 		var csv = new CsvReader(reader, config);
+		
 		var records = csv.GetRecords<CsvRow>().ToList();
 
 		foreach (var record in records)
